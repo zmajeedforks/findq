@@ -56,7 +56,31 @@ SOFTWARE.
 
 %code requires {
 // %code requires codeblock goes at top of .h outside of namespace and parser class
-// standard c++ #includes and defines
+// your license for .h file, standard c++ #includes and defines
+
+/*
+MIT License
+
+Copyright (c) 2024-2026 Zartaj Majeed
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
 
 #include <string>
 #include <vector>
@@ -143,7 +167,7 @@ struct BisonParam {
 
 %code provides {
 // %code provides codeblock goes in .h after namespace and parser class
-// everything here needs BnfParser defined earlier
+// everything here needs FindqParser defined earlier
 
 // parser objects
 namespace findqparser {
@@ -157,14 +181,37 @@ using namespace std;
 %code top {
 // % code top
 // appears as topmost code block in generated .cpp file just below gnu license
+// your license for .cpp file
 
-using namespace std;
+/*
+MIT License
+
+Copyright (c) 2024-2026 Zartaj Majeed
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
 }
 
 %{
-// %{ unnamed codeblock goes at very top of .cpp file before namespace and parser class
-
-#include <sstream>
+// %{ unnamed codeblock
+// goes at top of .cpp file after %code top, before namespace and parser class
 
 %}
 
@@ -287,9 +334,9 @@ void findqparser::FindqParser::error(const location& loc, const string& msg) {
 %token                               WARN                     "-warn"
 
 // operators
-%token                               NOT                      "-not"
-%token                               AND                      "-and"
-%token                               OR                       "-or"
+%token                               NOT                      "!"
+%token                               AND                      "-a"
+%token                               OR                       "-o"
 %token                               COMMA                    ","
 %token                               LEFT_PAREN               "("
 %token                               RIGHT_PAREN              ")"
@@ -299,7 +346,7 @@ void findqparser::FindqParser::error(const location& loc, const string& msg) {
 // tokens with values
 %token <NumberArg>                   NUMBER_ARG               "number"
 %token <string>                      STRING_ARG               "string"
-%token <string>                      STARTING_POINT
+%token <string>                      START_POINT
 
 
 // the start or root symbol of grammar
@@ -309,45 +356,50 @@ void findqparser::FindqParser::error(const location& loc, const string& msg) {
 // no code allowed in rules section outside of actions
 // these are bison comments that do not appear in generated .cpp file
 
-findq: find_commands
+findq: cmds
 
-find_commands: find_command | find_commands find_command
+cmds: cmd | cmds cmd
 
-find_command: "find" binary_expression | "find" starting_points binary_expression
+/*
+cmd: "find" binary_expr | "find" start_points binary_expr
 
-starting_points: STARTING_POINT | starting_points STARTING_POINT
+binary_expr: and_expr | or_expr | comma_expr
 
-binary_expression: and_expression {
-  if(bisonParam.ruleCb.binary_expression_from_and_cb) {
-    (*bisonParam.ruleCb.binary_expression_from_and_cb)();
-  }
-}
-| or_expression | comma_expression
+and_expr: unary_expr | and_expr and_op unary_expr 
 
-and_expression:
-  unary_expression
-| and_expression and_operator unary_expression {
-  if(bisonParam.ruleCb.and_expression_from_list_cb) {
-    (*bisonParam.ruleCb.and_expression_from_list_cb)();
-  }
-}
+or_expr: binary_expr "-o" and_expr
 
-and_operator: %empty | "-and"
+comma_expr: binary_expr "," and_expr
 
-or_expression: binary_expression "-or" and_expression
+unary_expr: primary | "!" primary | group
 
-comma_expression: binary_expression "," and_expression
+group: "(" binary_expr ")"
 
-unary_expression: primary | "-not" primary  {
-  if(bisonParam.ruleCb.unary_expression_from_not_cb) {
-    (*bisonParam.ruleCb.unary_expression_from_not_cb)();
-  }
-}
-| group
+primary: test | action | global_opt | positional_opt
 
-group: "(" binary_expression ")"
+and_op: %empty | "-a"
 
-primary: test | action | global_option | positional_option
+*/
+
+cmd: "find" comma_expr | "find" start_points comma_expr
+
+comma_expr: or_expr | comma_expr "," or_expr
+
+or_expr: and_expr | or_expr "-o" and_expr
+
+and_expr: item | and_expr and_op item 
+
+item: unit | "!" unit
+
+unit: primary | group
+
+group: "(" comma_expr ")"
+
+primary: test | action | global_opt | positional_opt
+
+and_op: %empty | "-a"
+
+start_points: START_POINT | start_points START_POINT
 
 test:
   "-amin"                      number_arg
@@ -409,7 +461,7 @@ action:
 | "-prune"
 | "-quit"
 
-global_option:
+global_opt:
   "-depth"
 | "-files0-from"               string_arg
 | "-help"
@@ -421,7 +473,7 @@ global_option:
 | "-noleaf"
 | "-xdev"
 
-positional_option:
+positional_opt:
   "-daystart"
 | "-follow"
 | "-nowarn"

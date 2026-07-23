@@ -2,18 +2,18 @@
 
 project(findq_src)
 
-include(FetchContent)
+# don't run bison, flex for windows and webassembly builds
+if(WIN32 OR EMSCRIPTEN)
+  message("Use checked-in generated bison, flex files from src/flexbison.gen")
+  # add_subdirectory(flexbison.gen)
+else()
+  message("Generate bison, flex files from src/grammar")
+  # add_subdirectory(grammar)
+endif()
 
-FetchContent_Declare(
-  googletest
-  GIT_REPOSITORY https://github.com/google/googletest
-  GIT_TAG main
-  GIT_SHALLOW TRUE
-)
-FetchContent_MakeAvailable(googletest)
+# add_subdirectory(parser)
+# add_subdirectory(lexer)
 
-add_subdirectory(grammar)
-add_subdirectory(lexer)
-add_subdirectory(parser)
+add_subdirectory(ast)
 
 enable_testing()

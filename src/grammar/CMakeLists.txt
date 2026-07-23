@@ -13,6 +13,7 @@ bison_target(bison_files findq_parser.bison.y ${CMAKE_CURRENT_BINARY_DIR}/findq_
 
 add_flex_bison_dependency(flex_files bison_files)
 
+# export to use in cmakefile for standalone parser in different directory
 set(FINDQ_PARSER_BISON_CPP_FILE ${BISON_bison_files_OUTPUT_SOURCE} CACHE STRING "" FORCE)
 
 add_library(flexbisonlib.findqparser STATIC ${FLEX_flex_files_OUTPUTS} ${BISON_bison_files_OUTPUT_SOURCE})
