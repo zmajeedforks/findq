@@ -36,10 +36,11 @@ class Lexer: public yyFlexLexer {
 public:
 
 // can only declare here since flex generates the implementation
-  FindqParser::symbol_type yylex(location&);
+  FindqParser::symbol_type yylex(LexParam&);
 
   Lexer() = default;
 
+  explicit Lexer(istream* yyin_arg): yyFlexLexer(yyin_arg) {}
   explicit Lexer(istream& yyin_arg): yyFlexLexer(&yyin_arg) {}
 
   enum class State {
@@ -55,6 +56,7 @@ public:
 
 private:
 
+// fix gcc warning -Woverloaded-virtual that virtual int EbnfParserFlexLexer::yylex() was hidden
   using yyFlexLexer::yylex;
 
 };

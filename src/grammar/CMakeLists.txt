@@ -6,23 +6,83 @@ find_package(FLEX)
 find_package(BISON)
 
 # generated source filename should match .l filename
-flex_target(flex_files findq_lexer.flex.l ${CMAKE_CURRENT_BINARY_DIR}/findq_lexer.flex.cpp COMPILE_FLAGS -f)
+flex_target(flex_files findq_lexer.flex.l
+  ${CMAKE_CURRENT_BINARY_DIR}/findq_lexer.flex.cpp
+  COMPILE_FLAGS "-f --nounistd"
+)
 
 # generated source filename should match .y filename
-bison_target(bison_files findq_parser.bison.y ${CMAKE_CURRENT_BINARY_DIR}/findq_parser.bison.cpp COMPILE_FLAGS "-Wall -Wdangling-alias -Werror --report lookaheads,cex,solved --report-file findq_grammar_report.txt")
+bison_target(bison_files findq_parser.bison.y
+  ${CMAKE_CURRENT_BINARY_DIR}/findq_parser.bison.cpp
+  DEFINES_FILE ${CMAKE_CURRENT_BINARY_DIR}/findq_parser.bison.h
+  COMPILE_FLAGS "-Wall -Wdangling-alias -Werror --report lookaheads,cex,solved --report-file findq_grammar_report.txt"
+)
 
 add_flex_bison_dependency(flex_files bison_files)
-
-# export to use in cmakefile for standalone parser in different directory
-set(FINDQ_PARSER_BISON_CPP_FILE ${BISON_bison_files_OUTPUT_SOURCE} CACHE STRING "" FORCE)
 
 add_library(flexbisonlib.findqparser STATIC ${FLEX_flex_files_OUTPUTS} ${BISON_bison_files_OUTPUT_SOURCE})
 
 target_compile_definitions(flexbisonlib.findqparser PRIVATE $<$<PLATFORM_ID:CYGWIN>: GTEST_HAS_PTHREAD=1 _POSIX_C_SOURCE=200809L _GNU_SOURCE>)
-target_compile_options(flexbisonlib.findqparser PRIVATE -Wall -Werror -Wextra -std=c++26 -pthread -fconcepts-diagnostics-depth=10)
-target_compile_options(flexbisonlib.findqparser PRIVATE $<$<CONFIG:debug>: -O0 -ggdb3> $<$<CONFIG:release>: -Og>)
 
-target_include_directories(flexbisonlib.findqparser PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/.. ${CMAKE_CURRENT_BINARY_DIR})
+target_compile_options(flexbisonlib.findqparser PRIVATE
+  $<$<CXX_COMPILER_ID:GNU>: -std=c++26 -Wall -Werror -Wextra -pthread -fconcepts-diagnostics-depth=10>
+  $<$<CXX_COMPILER_ID:Clang>: -Wall -Werror -Wextra -std=c++26 -pthread -Wno-unqualified-std-cast-call>
+)
+target_compile_options(flexbisonlib.findqparser PRIVATE
+  $<$<AND:$<CONFIG:debug>,$<CXX_COMPILER_ID:GNU>>: -O0 -ggdb3>
+  $<$<AND:$<CONFIG:release>,$<CXX_COMPILER_ID:GNU>>: -Og>
+  $<$<AND:$<CONFIG:debug>,$<CXX_COMPILER_ID:Clang>>: -O0 -ggdb3>
+  $<$<AND:$<CONFIG:release>,$<CXX_COMPILER_ID:Clang>>: -Og>
+)
 
-add_custom_command(TARGET flexbisonlib.findqparser POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/findq_grammar_report.txt ${CMAKE_CURRENT_SOURCE_DIR})
+message("flexbisonlib: flex include dirs \"${FLEX_INCLUDE_DIRS}\"")
+
+target_include_directories(flexbisonlib.findqparser PUBLIC ${CMAKE_SOURCE_DIR}/src ${CMAKE_CURRENT_BINARY_DIR})
+target_include_directories(flexbisonlib.findqparser PUBLIC
+  $<$<PLATFORM_ID:Darwin>: ${FLEX_INCLUDE_DIRS}>
+)
+
+target_link_libraries(flexbisonlib.findqparser findqastlib)
+
+add_custom_command(TARGET flexbisonlib.findqparser POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_BINARY_DIR}/findq_grammar_report.txt ${CMAKE_CURRENT_SOURCE_DIR})
+
+# copy generated files and bison grammar report to source tree
+set(GEN_SRC_DIR ${CMAKE_SOURCE_DIR}/src/flexbison.gen)
+
+add_custom_command(TARGET flexbisonlib.findqparser POST_BUILD
+  COMMENT "Copy generated parser, lexer and bison grammar report to source tree"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_BINARY_DIR}/findq_grammar_report.txt ${CMAKE_CURRENT_SOURCE_DIR}
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_BINARY_DIR}/findq_parser.bison.h ${GEN_SRC_DIR}
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_BINARY_DIR}/findq_parser.bison.cpp ${GEN_SRC_DIR}
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_BINARY_DIR}/locations.bison.h ${GEN_SRC_DIR}
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_BINARY_DIR}/findq_lexer.flex.cpp ${GEN_SRC_DIR}
+)
+
+# damn annoying mac
+if(NOT APPLE)
+  set(OPT_I -i)
+else()
+  set(OPT_I "-i \"\"")
+endif()
+
+add_custom_command(TARGET flexbisonlib.findqparser POST_BUILD
+  COMMENT "Strip absolute local paths from generated bison, flex files"
+  COMMAND sed -E ${OPT_I} 's!${CMAKE_CURRENT_BINARY_DIR}!${GEN_SRC_DIR}!' ${GEN_SRC_DIR}/findq_parser.bison.h
+  COMMAND sed -E ${OPT_I} 's!${CMAKE_SOURCE_DIR}!.!' ${GEN_SRC_DIR}/findq_parser.bison.h
+  COMMAND sed -E ${OPT_I} 's!${CMAKE_CURRENT_BINARY_DIR}!${GEN_SRC_DIR}!' ${GEN_SRC_DIR}/findq_parser.bison.cpp
+  COMMAND sed -E ${OPT_I} 's!${CMAKE_SOURCE_DIR}!.!' ${GEN_SRC_DIR}/findq_parser.bison.cpp
+  COMMAND sed -E ${OPT_I} 's!${CMAKE_CURRENT_BINARY_DIR}!${GEN_SRC_DIR}!' ${GEN_SRC_DIR}/locations.bison.h
+  COMMAND sed -E ${OPT_I} 's!${CMAKE_SOURCE_DIR}!.!' ${GEN_SRC_DIR}/locations.bison.h
+  COMMAND sed -E ${OPT_I} 's!${CMAKE_CURRENT_BINARY_DIR}!${GEN_SRC_DIR}!' ${GEN_SRC_DIR}/findq_lexer.flex.cpp
+  COMMAND sed -E ${OPT_I} 's!${CMAKE_SOURCE_DIR}!.!' ${GEN_SRC_DIR}/findq_lexer.flex.cpp
+)
+
+add_custom_command(TARGET flexbisonlib.findqparser POST_BUILD
+  COMMENT "Verbatim strip absolute local paths from generated bison, flex files"
+  COMMAND sed -E ${OPT_I} [[s/(YY_YY).*(_findq_PARSER_BISON_H)/\1\2/]] ${GEN_SRC_DIR}/findq_parser.bison.h
+  COMMAND sed -E ${OPT_I} [[s/(YY_YY).*(_LOCATIONS_BISON_H)/\1\2/]] ${GEN_SRC_DIR}/locations.bison.h
+  VERBATIM
+)
+
+enable_testing()
 

@@ -92,11 +92,12 @@ SOFTWARE.
 
 #include "locations.bison.h"
 
+#include "ast/findq_token_types.h"
 #include "ast/findq_ast.h"
 
 #ifdef _MSC_VER
-#pragma warning(push)
 // disable vc++ warning C4065, switch statement contains default but no case labels in code generated for basic_symbol::clear() in .h file
+#pragma warning(push)
 #pragma warning(disable: 4065)
 #endif
 
@@ -104,17 +105,13 @@ namespace findqparser {
 using namespace std;
 using namespace chrono;
 
-// types for data in tokens passed from lexer to parser
+#if 0
 struct NumberArg {
-  uint64_t val;
   int sign = 0;
-  bool operator==(const NumberArg&) const = default;
+  uint64_t val;
+  auto operator<=>(const NumberArg&) const = default;
 };
-
-struct Test {
-  optional<variant<string, NumberArg>> arg;
-  function<bool()> val = []{ return false; };
-};
+#endif
 
 struct RuleCallbacks {
   optional<function<void(void)>> binary_expression_from_and_cb{};
@@ -123,21 +120,21 @@ struct RuleCallbacks {
   optional<function<void(const string&)>> string_arg_cb{};
 };
 
-#if 0
-// forward declare Lexer - cannot #include lexer header here because Lexer itself needs parser class definition that comes after this %code requires codeblock in generated header file
-struct Lexer;
-#endif
-
 struct BisonParam {
-#if 0
-  Lexer& lexer;
-#endif
-  RuleCallbacks ruleCb{};
+  FindqAstNode ast;
+
+  RuleCallbacks ruleCb;
   struct Stats {
     time_point<steady_clock> parseStartTime;
     time_point<steady_clock> parseEndTime;
     duration<double> parseTimeSec;
-  } stats{};
+  } stats;
+};
+
+// info for lexer to use in yylex
+struct LexParam {
+// position in input stream for lexer to update
+  location loc{};
 };
 
 #if 0
@@ -148,8 +145,8 @@ OptionsMap curPositionalOptions = defaultPositionalOptions;
 
 // println formatter for location object
 template<>
-struct std::formatter<finqparser::location> {
-  std::format_context::iterator format(const finqparser::location& loc, std::format_context& ctx) const {
+struct std::formatter<findqparser::location> {
+  std::format_context::iterator format(const findqparser::location& loc, std::format_context& ctx) const {
     std::ostringstream os;
     os << loc;
     return std::format_to(ctx.out(), "{}", os.str());
@@ -254,18 +251,26 @@ SOFTWARE.
 #include <string>
 #include <chrono>
 
-#if 0
-// Lexer header needed here because its methods are used in semantic actions
-#include "lexer/findq_lexer.h"
+#include "ast/findq_ast.h"
+
+#ifdef _MSC_VER
+// disable vc++ warning C4065, switch statement contains default but no other case labels when there are no semantic actions
+#pragma warning(push)
+#pragma warning(disable: 4065)
+
+// disable vc++ warning C4244, return conversion from const short to findqparser::FindqParser::state_type, possible loss of data
+#pragma warning(push)
+#pragma warning(disable: 4244)
 #endif
 
 using namespace std;
+using findqparser::FindqParser;
 
 namespace {
   const auto defaultInputName = "inputstream"s;
 }
 
-void findqparser::FindqParser::error(const location& loc, const string& msg) {
+void FindqParser::error(const location& loc, const string& msg) {
   println("error at {}: {}", loc, msg);
 }
 
@@ -296,6 +301,8 @@ void FindqParser::report_syntax_error(const FindqParser::context& ctx) const {
 
   bisonParam.stats.parseStartTime = steady_clock::now();
 
+  auto& loc = lexParam.loc;
+
   if(loc.begin.filename == nullptr) {
     loc.initialize(&defaultInputName);
   }
@@ -304,103 +311,123 @@ void FindqParser::report_syntax_error(const FindqParser::context& ctx) const {
 // token definitions
 
 // find command
-%token                               FIND                     "find"
+%token                           FIND                     "find"
 
 // find primaries
 
 // tests
-%token                               AMIN                     "-amin"
-%token                               ANEWER                   "-anewer"
-%token                               ATIME                    "-atime"
-%token                               CMIN                     "-cmin"
-%token                               CNEWER                   "-cnewer"
-%token                               CTIME                    "-ctime"
-%token                               EMPTY                    "-empty"
-%token                               EXECUTABLE               "-executable"
-%token                               FALSE                    "-false"
-%token                               FSTYPE                   "-fstype"
-%token                               GID                      "-gid"
-%token                               GROUP                    "-group"
-%token                               ILNAME                   "-ilname"
-%token                               INAME                    "-iname"
-%token                               INUM                     "-inum"
-%token                               IPATH                    "-ipath"
-%token                               IREGEX                   "-iregex"
-%token                               IWHOLENAME               "-iwholename"
-%token                               LINKS                    "-links"
-%token                               LNAME                    "-lname"
-%token                               MMIN                     "-mmin"
-%token                               MTIME                    "-mtime"
-%token                               NAME                     "-name"
-%token                               NEWER                    "-newer"
-%token                               NEWERXY                  "-newerXY"
-%token                               NOGROUP                  "-nogroup"
-%token                               NOUSER                   "-nouser"
-%token                               PATH                     "-path"
-%token                               PERM                     "-perm"
-%token                               READABLE                 "-readable"
-%token                               REGEX                    "-regex"
-%token                               SAMEFILE                 "-samefile"
-%token                               SIZE                     "-size"
-%token                               TRUE                     "-true"
-%token                               TYPE                     "-type"
-%token                               UID                      "-uid"
-%token                               USED                     "-used"
-%token                               USER                     "-user"
-%token                               WHOLENAME                "-wholename"
-%token                               WRITABLE                 "-writable"
-%token                               XTYPE                    "-xtype"
+%token                           AMIN                     "-amin"
+%token                           ANEWER                   "-anewer"
+%token                           ATIME                    "-atime"
+%token                           CMIN                     "-cmin"
+%token                           CNEWER                   "-cnewer"
+%token                           CTIME                    "-ctime"
+%token                           EMPTY                    "-empty"
+%token                           EXECUTABLE               "-executable"
+%token                           FALSE                    "-false"
+%token                           FSTYPE                   "-fstype"
+%token                           GID                      "-gid"
+%token                           GROUP                    "-group"
+%token                           ILNAME                   "-ilname"
+%token                           INAME                    "-iname"
+%token                           INUM                     "-inum"
+%token                           IPATH                    "-ipath"
+%token                           IREGEX                   "-iregex"
+%token                           IWHOLENAME               "-iwholename"
+%token                           LINKS                    "-links"
+%token                           LNAME                    "-lname"
+%token                           MMIN                     "-mmin"
+%token                           MTIME                    "-mtime"
+%token                           NAME                     "-name"
+%token                           NEWER                    "-newer"
+%token                           NEWERXY                  "-newerXY"
+%token                           NOGROUP                  "-nogroup"
+%token                           NOUSER                   "-nouser"
+%token                           PATH                     "-path"
+%token                           PERM                     "-perm"
+%token                           READABLE                 "-readable"
+%token                           REGEX                    "-regex"
+%token                           SAMEFILE                 "-samefile"
+%token                           SIZE                     "-size"
+%token                           TRUE                     "-true"
+%token                           TYPE                     "-type"
+%token                           UID                      "-uid"
+%token                           USED                     "-used"
+%token                           USER                     "-user"
+%token                           WHOLENAME                "-wholename"
+%token                           WRITABLE                 "-writable"
+%token                           XTYPE                    "-xtype"
 
 // actions
-%token                               DELETE                   "-delete"
-%token                               EXEC                     "-exec"
-%token                               EXECDIR                  "-execdir"
-%token                               FLS                      "-fls"
-%token                               FPRINT                   "-fprint"
-%token                               FPRINT0                  "-fprint0"
-%token                               FPRINTF                  "-fprintf"
-%token                               LS                       "-ls"
-%token                               OK                       "-ok"
-%token                               OKDIR                    "-okdir"
-%token                               PRINT                    "-print"
-%token                               PRINT0                   "-print0"
-%token                               PRINTF                   "-printf"
-%token                               PRUNE                    "-prune"
-%token                               QUIT                     "-quit"
+%token                           DELETE                   "-delete"
+%token                           EXEC                     "-exec"
+%token                           EXECDIR                  "-execdir"
+%token                           FLS                      "-fls"
+%token                           FPRINT                   "-fprint"
+%token                           FPRINT0                  "-fprint0"
+%token                           FPRINTF                  "-fprintf"
+%token                           LS                       "-ls"
+%token                           OK                       "-ok"
+%token                           OKDIR                    "-okdir"
+%token                           PRINT                    "-print"
+%token                           PRINT0                   "-print0"
+%token                           PRINTF                   "-printf"
+%token                           PRUNE                    "-prune"
+%token                           QUIT                     "-quit"
 
 // global options
-%token                               DEPTH                    "-depth"
-%token                               FILES0_FROM              "-files0-from"
-%token                               HELP                     "-help"
-%token                               IGNORE_READDIR_RACE      "-ignore_readdir_race"
-%token                               MAXDEPTH                 "-maxdepth"
-%token                               MINDEPTH                 "-mindepth"
-%token                               MOUNT                    "-mount"
-%token                               NOIGNORE_READDIR_RACE    "-noignore_readdir_race"
-%token                               NOLEAF                   "-noleaf"
-%token                               XDEV                     "-xdev"
+%token                           DEPTH                    "-depth"
+%token                           FILES0_FROM              "-files0-from"
+%token                           HELP                     "-help"
+%token                           IGNORE_READDIR_RACE      "-ignore_readdir_race"
+%token                           MAXDEPTH                 "-maxdepth"
+%token                           MINDEPTH                 "-mindepth"
+%token                           MOUNT                    "-mount"
+%token                           NOIGNORE_READDIR_RACE    "-noignore_readdir_race"
+%token                           NOLEAF                   "-noleaf"
+%token                           XDEV                     "-xdev"
 
 // positional options
-%token                               DAYSTART                 "-daystart"
-%token                               FOLLOW                   "-follow"
-%token                               NOWARN                   "-nowarn"
-%token                               REGEXTYPE                "-regextype"
-%token                               WARN                     "-warn"
+%token                           DAYSTART                 "-daystart"
+%token                           FOLLOW                   "-follow"
+%token                           NOWARN                   "-nowarn"
+%token                           REGEXTYPE                "-regextype"
+%token                           WARN                     "-warn"
 
 // operators
-%token                               NOT                      "-not"
-%token                               AND                      "-and"
-%token                               OR                       "-or"
-%token                               COMMA                    ","
-%token                               LEFT_PAREN               "("
-%token                               RIGHT_PAREN              ")"
+%token                           NOT                      "!"
+%token                           AND                      "-a"
+%token                           OR                       "-o"
+%token                           COMMA                    ","
+%token                           LEFT_PAREN               "("
+%token                           RIGHT_PAREN              ")"
 
-%token                               SEMICOLON                ";"
+%token                           SEMICOLON                ";"
 
 // tokens with values
-%token <NumberArg>                   NUMBER_ARG               "number"
-%token <string>                      STRING_ARG               "string"
-%token <string>                      STARTING_POINT
+
+%token <NumberArg>               NUMBER_ARG
+%token <string>                  STRING_ARG
+%token <vector<string>>          EXEC_ARG
+
+%token <string>                  START_POINT
+
+// we choose to skip TestPrimary, ActionPrimary types for efficiency
+%nterm <Primary>                 primary
+%nterm <Primary>                 test
+%nterm <Primary>                 action
+%nterm <Primary>                 global_opt
+%nterm <Primary>                 positional_opt
+
+%nterm <Unit>                    unit
+%nterm <Term>                    term
+%nterm <AndExpr>                 and_expr
+%nterm <OrExpr>                  or_expr
+%nterm <CommaExpr>               comma_expr
+%nterm <Cmd>                     cmd
+%nterm <vector<Cmd>>             cmds
+%nterm <Findq>                   findq
+
 
 
 // the start or root symbol of grammar
@@ -410,6 +437,249 @@ void FindqParser::report_syntax_error(const FindqParser::context& ctx) const {
 // no code allowed in rules section outside of actions
 // these are bison comments that do not appear in generated .cpp file
 
+findq: cmds {
+  $$.cmds = move($cmds);
+}
+
+cmds:
+  cmd {
+  $$.push_back(move($cmd));
+}
+| cmds cmd {
+  $$ = move($1);
+  $$.push_back(move($cmd));
+}
+
+cmd:
+ "find" comma_expr {
+  $$.expr = move($comma_expr);
+}
+| "find" start_points comma_expr {
+  $$.expr = move($comma_expr);
+}
+
+comma_expr:
+  or_expr {
+  $$.segs.push_back(move($or_expr));
+}
+| comma_expr "," or_expr {
+  $$ = move($1);
+  $$.segs.push_back(move($or_expr));
+}
+
+or_expr:
+  and_expr {
+  $$.ors.push_back(move($and_expr));
+}
+| or_expr "-o" and_expr {
+  $$ = move($1);
+  $$.ors.push_back(move($and_expr));
+}
+
+and_expr:
+  term {
+  $$.ands.push_back(move($term));
+
+}
+| and_expr and_op term {
+  $$ = move($1);
+  $$.ands.push_back(move($term));
+}
+
+term:
+  unit {
+  $$.unit = move($unit);
+}
+| "!" unit {
+  $$.unit = move($unit);
+  $$.isTrue = false;
+}
+
+unit:
+  primary {
+  $$ = move($1);
+}
+| group {
+}
+
+group: "(" comma_expr ")"
+
+primary:
+  test { $$ = move($1); }
+| action { $$ = move($1); }
+| global_opt { $$ = move($1); }
+| positional_opt { $$ = move($1); }
+
+and_op: %empty | "-a"
+
+start_points: START_POINT | start_points START_POINT
+
+test:
+  "-amin"                      NUMBER_ARG {
+  $$ = Amin{move($2)};
+}
+| "-anewer"                    STRING_ARG {
+  $$ = Anewer{move($2)};
+}
+| "-atime"                     NUMBER_ARG {
+  $$ = Atime{move($2)};
+}
+| "-cmin"                      NUMBER_ARG {
+  $$ = Cmin{move($2)};
+}
+| "-cnewer"                    STRING_ARG {
+  $$ = Cnewer{move($2)};
+}
+| "-ctime"                     NUMBER_ARG {
+  $$ = Ctime{move($2)};
+}
+| "-empty" {
+  $$ = Empty{};
+}
+| "-executable" {
+  $$ = Executable{};
+}
+| "-false" {
+  $$ = False{};
+}
+| "-fstype"                    STRING_ARG {
+  $$ = Fstype{move($2)};
+}
+| "-gid"                       NUMBER_ARG {
+  $$ = Gid{move($2)};
+}
+| "-group"                     STRING_ARG {
+  $$ = Group{move($2)};
+}
+| "-ilname"                    STRING_ARG {
+  $$ = Ilname{move($2)};
+}
+| "-iname"                     STRING_ARG {
+  $$ = Iname{move($2)};
+}
+| "-inum"                      NUMBER_ARG {
+  $$ = Inum{move($2)};
+}
+| "-ipath"                     STRING_ARG {
+  $$ = Ipath{move($2)};
+}
+| "-iregex"                    STRING_ARG {
+  $$ = Iregex{move($2)};
+}
+| "-iwholename"                STRING_ARG {
+  $$ = Iwholename{move($2)};
+}
+| "-links"                     NUMBER_ARG {
+  $$ = Links{move($2)};
+}
+| "-lname"                     STRING_ARG {
+  $$ = Lname{move($2)};
+}
+| "-mmin"                      NUMBER_ARG {
+  $$ = Mmin{move($2)};
+}
+| "-mtime"                     NUMBER_ARG {
+  $$ = Mtime{move($2)};
+}
+| "-name"                      STRING_ARG {
+  $$ = Name{move($2)};
+}
+| "-newer"                     STRING_ARG {
+  $$ = Newer{move($2)};
+}
+| "-newerXY"                   STRING_ARG {
+  $$ = NewerXY{move($2)};
+}
+| "-nogroup" {
+  $$ = NoGroup{};
+}
+| "-nouser" {
+  $$ = NoUser{};
+}
+| "-path"                      STRING_ARG {
+  $$ = Path{move($2)};
+}
+| "-perm"                      STRING_ARG {
+  $$ = Perm{move($2)};
+}
+| "-readable" {
+  $$ = Readable{};
+}
+| "-regex"                     STRING_ARG {
+  $$ = Regex{move($2)};
+}
+| "-samefile" {
+  $$ = Samefile{};
+}
+| "-size"                      NUMBER_ARG {
+  $$ = Size{move($2)};
+}
+| "-true" {
+  $$ = True{};
+}
+| "-type"                      STRING_ARG {
+  $$ = Type{move($2)};
+}
+| "-uid"                       NUMBER_ARG {
+  $$ = Uid{move($2)};
+}
+| "-used"                      NUMBER_ARG {
+  $$ = Used{move($2)};
+}
+| "-user"                      STRING_ARG {
+  $$ = User{move($2)};
+}
+| "-wholename"                 STRING_ARG {
+  $$ = Wholename{move($2)};
+}
+| "-writable" {
+  $$ = Writable{};
+}
+| "-xtype"                     STRING_ARG {
+  $$ = Xtype{move($2)};
+}
+
+action:
+  "-delete" {}
+| "-exec"                      EXEC_ARG {}
+| "-execdir"                   EXEC_ARG {}
+| "-fls"                       STRING_ARG {}
+| "-fprint"                    STRING_ARG {}
+| "-fprint0"                   STRING_ARG {}
+| "-fprintf"                   STRING_ARG {}
+| "-ls" {}
+| "-ok"                        EXEC_ARG {}
+| "-okdir"                     EXEC_ARG {}
+| "-print" {}
+| "-print0" {}
+| "-printf"                    STRING_ARG {}
+| "-prune" {}
+| "-quit" {}
+
+global_opt:
+  "-depth" {}
+| "-files0-from"               STRING_ARG {}
+| "-help" {}
+| "-ignore_readdir_race" {}
+| "-maxdepth"                  NUMBER_ARG {}
+| "-mindepth"                  NUMBER_ARG {}
+| "-mount" {}
+| "-noignore_readdir_race" {}
+| "-noleaf" {}
+| "-xdev" {}
+
+positional_opt:
+  "-daystart" {}
+| "-follow" {}
+| "-nowarn" {}
+| "-regextype"                 STRING_ARG {}
+| "-warn" {}
+
+
+
+
+
+/*
 findq: find_commands
 
 find_commands: find_command | find_commands find_command
@@ -566,7 +836,15 @@ unset_lexer_state: %empty {
   bisonParam.lexer.unsetState();
 #endif
 }
+*/
 
 %%
 // %code epilog block
 // goes at bottom of generated .cpp file after namespace and parser implementation
+
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#pragma warning(pop)
+#endif
+

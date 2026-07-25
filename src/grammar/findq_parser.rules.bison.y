@@ -360,36 +360,15 @@ findq: cmds
 
 cmds: cmd | cmds cmd
 
-/*
-cmd: "find" binary_expr | "find" start_points binary_expr
-
-binary_expr: and_expr | or_expr | comma_expr
-
-and_expr: unary_expr | and_expr and_op unary_expr 
-
-or_expr: binary_expr "-o" and_expr
-
-comma_expr: binary_expr "," and_expr
-
-unary_expr: primary | "!" primary | group
-
-group: "(" binary_expr ")"
-
-primary: test | action | global_opt | positional_opt
-
-and_op: %empty | "-a"
-
-*/
-
 cmd: "find" comma_expr | "find" start_points comma_expr
 
 comma_expr: or_expr | comma_expr "," or_expr
 
 or_expr: and_expr | or_expr "-o" and_expr
 
-and_expr: item | and_expr and_op item 
+and_expr: term | and_expr and_op term
 
-item: unit | "!" unit
+term: unit | "!" unit
 
 unit: primary | group
 

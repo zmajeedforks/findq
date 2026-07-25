@@ -54,20 +54,39 @@ SOFTWARE.
 %option nounput noinput batch
 
  // flex start conditions ie states
-%x STARTING_POINTS_WHITESPACE
-%x STARTING_POINTS
-%x PRIMARY
-%x STRING_ARG_WHITESPACE
-%x STRING_ARG
-%x NUMBER_ARG_WHITESPACE
-%x NUMBER_ARG
-%x SKIP_TO_EOL
+ // INITIAL 0 is default start condition
+ // start conditions do not appear here in generated .cpp file
+ // instead they turn into macros defined inside ylex()
 
-%x EXEC_ARGS_WHITESPACE
-%x EXEC_ARGS
+%x SC_START_POINT_WHITESPACE
+%x SC_START_POINT_START
+%x SC_PRIMARY
+%x SC_STRING_ARG_WHITESPACE
+%x SC_STRING_ARG
+%x SC_NUMBER_ARG_WHITESPACE
+%x SC_NUMBER_ARG
+%x SC_SKIP_TO_EOL
+
+%x SC_EXEC_ARGS_WHITESPACE
+%x SC_EXEC_ARGS
 
 %top{
 // appears at top of generated .cpp file
+
+// fix flex bug vc++ warning C4005, INT8_MIN macro redefinition
+#include <stdint.h>
+#ifdef _WIN32
+#  undef INT8_MIN
+#endif
+
+#include <string>
+
+#ifdef _MSC_VER
+#pragma warning(push)
+// disable vc++ warning C4244, return conversion from streamsize to int possible loss of data, in yyFlexLexer::LexerInput() in .cpp file
+#pragma warning(disable: 4244)
+#endif
+
 }
 
 %{
@@ -82,8 +101,10 @@ SOFTWARE.
 #include "findq_parser.bison.h"
 #include "lexer/findq_lexer.h"
 
+#include "ast/findq_token_types.h"
+
 #undef YY_DECL
-#define YY_DECL findqparser::FindqParser::symbol_type findqparser::Lexer::yylex(location& loc)
+#define YY_DECL findqparser::FindqParser::symbol_type findqparser::Lexer::yylex(LexParam& param)
 
 // fix flex error could not convert 0 from int to symbol_type for #define YY_NULL 0
 // caused by turning on bison %locations because symbol_type no longer has single int constructor for implicit conversion
@@ -95,6 +116,8 @@ using namespace findqparser;
 // needed for custom yyterminate
 using symbol_type = FindqParser::symbol_type;
 
+// flex start conditions appear as macros in .cpp file here
+
 %}
 
  // flex rules section
@@ -104,44 +127,52 @@ using symbol_type = FindqParser::symbol_type;
 
  // code appears inside yylex function at start
 
+ // position in input stream
+  auto& loc = param.loc;
+ // update current position to previous line and column numbers
   loc.step();
-  int errState;
-  char errChar;
 
- // token patterns
+  int errState = -1;
+  char errChar{};
+
+
+ // flex rules section
+ /* only c-style comments starting at second column allowed inside rules section */
+ /* first flex rule starts at beginning of line */
+
 
 find {
   loc.columns(yyleng);
-  yy_push_state(STARTING_POINTS_WHITESPACE);
+  yy_push_state(SC_START_POINT_WHITESPACE);
   return FindqParser::make_FIND(loc);
 }
 
-<STARTING_POINTS_WHITESPACE>{
+<SC_START_POINT_WHITESPACE>{
   [[:space:]]* {
     yy_pop_state();
     loc.columns(yyleng);
-    yy_push_state(STARTING_POINTS);
+    yy_push_state(SC_START_POINT_START);
   }
 }
 
  /* directory paths must not begin with any of [-!(] because these characters can be the start of a find primary term */
  /* workaround for directories that do begin with one of these characters is to use absolute paths or relative paths that start with "./" */
-<STARTING_POINTS>{
+<SC_START_POINT_START>{
   [-!(] {
     yy_pop_state();
-    yy_push_state(PRIMARY);
+    yy_push_state(SC_PRIMARY);
     yyless(0);
   }
 
   [^-!(][[:^space:]]* {
     yy_pop_state();
     loc.columns(yyleng);
-    yy_push_state(STARTING_POINTS_WHITESPACE);
-    return FindqParser::make_STARTING_POINT(yytext, loc);
+    yy_push_state(SC_START_POINT_WHITESPACE);
+    return FindqParser::make_START_POINT(yytext, loc);
   }
 }
 
-<PRIMARY>{
+<SC_PRIMARY>{
 
 -amin {
   loc.columns(yyleng);
@@ -383,6 +414,11 @@ find {
   return FindqParser::make_OR(loc);
 }
 
+-path {
+  loc.columns(yyleng);
+  return FindqParser::make_PATH(loc);
+}
+
 -perm {
   loc.columns(yyleng);
   return FindqParser::make_PERM(loc);
@@ -391,11 +427,6 @@ find {
 -prune {
   loc.columns(yyleng);
   return FindqParser::make_PRUNE(loc);
-}
-
--path {
-  loc.columns(yyleng);
-  return FindqParser::make_PATH(loc);
 }
 
 -print {
@@ -411,11 +442,6 @@ find {
 -printf {
   loc.columns(yyleng);
   return FindqParser::make_PRINTF(loc);
-}
-
--prune {
-  loc.columns(yyleng);
-  return FindqParser::make_PRUNE(loc);
 }
 
 -quit {
@@ -510,15 +536,15 @@ find {
 
 }
 
-<STRING_ARG_WHITESPACE>{
+<SC_STRING_ARG_WHITESPACE>{
   [[:space:]]+ {
     yy_pop_state();
     loc.columns(yyleng);
-    yy_push_state(STRING_ARG);
+    yy_push_state(SC_STRING_ARG);
   }
 }
 
-<STRING_ARG>{
+<SC_STRING_ARG>{
   [^"'][^[:space:]]* {
     loc.columns(yyleng);
     return FindqParser::make_STRING_ARG(yytext, loc);
@@ -532,15 +558,15 @@ find {
   }
 }
 
-<NUMBER_ARG_WHITESPACE>{
+<SC_NUMBER_ARG_WHITESPACE>{
   [[:space:]]+ {
     yy_pop_state();
     loc.columns(yyleng);
-    yy_push_state(NUMBER_ARG);
+    yy_push_state(SC_NUMBER_ARG);
   }
 }
 
-<NUMBER_ARG>{
+<SC_NUMBER_ARG>{
   [-+]?[0-9]+ {
     loc.columns(yyleng);
     const char firstChar = yytext[0];
@@ -558,15 +584,15 @@ find {
   }
 }
 
- /* lexer moves from EXEC_ARGS_WHITESPACE to EXEC_ARGS_WHITESPACE state and back until parser tells it to pop EXEC_ARGS_WHITESPACE state */
-<EXEC_ARGS_WHITESPACE>{
+ /* lexer moves from SC_EXEC_ARGS_WHITESPACE to SC_EXEC_ARGS_WHITESPACE state and back until parser tells it to pop SC_EXEC_ARGS_WHITESPACE state */
+<SC_EXEC_ARGS_WHITESPACE>{
   [[:space:]]+ {
     loc.columns(yyleng);
-    yy_push_state(EXEC_ARGS);
+    yy_push_state(SC_EXEC_ARGS);
   }
 }
 
-<EXEC_ARGS>{
+<SC_EXEC_ARGS>{
 
   [^";][^[:space:]]* {
     yy_pop_state();
@@ -597,10 +623,10 @@ find {
     loc.columns(yyleng);
   }
   errState = YY_START;
-  BEGIN(SKIP_TO_EOL);
+  BEGIN(SC_SKIP_TO_EOL);
 }
 
-<SKIP_TO_EOL>{
+<SC_SKIP_TO_EOL>{
   .+ {
     BEGIN(0);
     loc.columns(yyleng);
@@ -609,5 +635,9 @@ find {
 }
 
 %%
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 #include "lexer/findq_lexer_methods.h"

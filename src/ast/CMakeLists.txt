@@ -3,7 +3,7 @@
 project(findq_ast)
 
 add_library(findqastlib INTERFACE)
-target_sources(findqastlib INTERFACE findq_ast.h findq_primary.h)
+target_sources(findqastlib INTERFACE findq_ast.h findq_primary.h findq_token_types.h)
 
 target_compile_definitions(findqastlib INTERFACE $<$<PLATFORM_ID:CYGWIN>: GTEST_HAS_PTHREAD=1 _POSIX_C_SOURCE=200809L _GNU_SOURCE>)
 

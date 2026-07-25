@@ -46,11 +46,55 @@ TEST(TestPrimary, test_000) {
 
 }
 
+TEST(TestPrimary, test_0001) {
+
+  string val = "timestamp.txt";
+  auto p = Name{val};
+
+  EXPECT_EQ(p, val);
+
+}
+
+TEST(TestPrimary, test_0002) {
+
+  TestPrimary p = Name{"timestamp.txt"s};
+
+  EXPECT_EQ(get<Name>(p), "timestamp.txt");
+
+}
+
+TEST(TestPrimary, test_0003) {
+
+  TestPrimary p = Name{"timestamp.txt"sv};
+
+  EXPECT_EQ(get<Name>(p), "timestamp.txt");
+
+}
+
+TEST(TestPrimary, test_0004) {
+
+// auto because cannot initialize string from string_view
+  auto val = "timestamp.txt"sv;
+  auto p = Name{val};
+
+  EXPECT_EQ(p, val);
+
+}
+
+// test direct comparison of Primary variant and property subtype
+TEST(TestPrimary, test_0005) {
+
+  TestPrimary p = Name{"timestamp.txt"};
+
+  EXPECT_EQ(p, (Name{"timestamp.txt"}));
+
+}
+
 TEST(TestPrimary, test_001) {
 
-  TestPrimary p = Size{123};
+  TestPrimary p = Size{123u};
 
-  EXPECT_EQ(get<Size>(p), 123);
+  EXPECT_EQ(get<Size>(p), NumberArg{123});
 
 }
 
@@ -96,9 +140,9 @@ TEST(Primary, test_006) {
 
 TEST(Primary, test_007) {
 
-  Primary p = Size{123};
+  Primary p = Size{123u};
 
-  EXPECT_EQ(get<Size>(p), 123);
+  EXPECT_EQ(get<Size>(p), NumberArg{123});
 
 }
 
@@ -140,14 +184,14 @@ TEST(Ast, test_002) {
 
 TEST(Ast, test_003) {
 
-  Item expr = { { Name{ "file.txt" } } };
+  Term expr = { { Name{ "file.txt" } } };
   EXPECT_EQ(get<Name>(get<Primary>(expr.unit)), "file.txt");
   EXPECT_TRUE(expr.isTrue);
 }
 
 TEST(Ast, test_004) {
 
-  Item expr = { { Name{ "file.txt" } }, false };
+  Term expr = { { Name{ "file.txt" } }, false };
   EXPECT_EQ(get<Name>(get<Primary>(expr.unit)), "file.txt");
   EXPECT_FALSE(expr.isTrue);
 }
@@ -161,8 +205,8 @@ TEST(Ast, test_005) {
 
 TEST(Ast, test_006) {
 
-  AndExpr expr = {{ { { Uid{ 123 } } } }};
-  EXPECT_EQ(get<Uid>(get<Primary>(expr.ands[0].unit)), 123);
+  AndExpr expr = {{ { { Uid{ 123u } } } }};
+  EXPECT_EQ(get<Uid>(get<Primary>(expr.ands[0].unit)), NumberArg{123});
   EXPECT_TRUE(expr.ands[0].isTrue);
 }
 
@@ -191,14 +235,14 @@ TEST(Ast, test_008) {
     }},
 
     AndExpr{{
-      { { Uid{ 123 } } }
+      { { Uid{ 123u } } }
     }},
   }};
 
   EXPECT_EQ(get<Name>(get<Primary>(expr.ors[0].ands[0].unit)), "file.txt");
   EXPECT_EQ(get<Empty>(get<Primary>(expr.ors[0].ands[1].unit)), (monostate{}));
   EXPECT_FALSE(expr.ors[0].ands[1].isTrue);
-  EXPECT_EQ(get<Uid>(get<Primary>(expr.ors[1].ands[0].unit)), 123);
+  EXPECT_EQ(get<Uid>(get<Primary>(expr.ors[1].ands[0].unit)), NumberArg{123});
 }
 
 TEST(Ast, test_009) {
@@ -211,7 +255,7 @@ TEST(Ast, test_009) {
       }},
 
       AndExpr{{
-        { { Uid{ 123 } } }
+        { { Uid{ 123u } } }
       }},
     }}
   }};
@@ -219,7 +263,7 @@ TEST(Ast, test_009) {
   EXPECT_EQ(get<Name>(get<Primary>(expr.segs[0].ors[0].ands[0].unit)), "file.txt");
   EXPECT_EQ(get<Empty>(get<Primary>(expr.segs[0].ors[0].ands[1].unit)), (monostate{}));
   EXPECT_FALSE(expr.segs[0].ors[0].ands[1].isTrue);
-  EXPECT_EQ(get<Uid>(get<Primary>(expr.segs[0].ors[1].ands[0].unit)), 123);
+  EXPECT_EQ(get<Uid>(get<Primary>(expr.segs[0].ors[1].ands[0].unit)), NumberArg{123});
 
 }
 
@@ -227,27 +271,25 @@ TEST(AstNode, test_000) {
 
   Cmd expr = {
     { "/opt" },
-    {
-      CommaExpr{{
-        OrExpr{{
-          AndExpr{{
-            { { Name{ "file.txt" } } },
-            { { Empty{} }, false }
-          }},
+    {{
+      OrExpr{{
+        AndExpr{{
+          { { Name{ "file.txt" } } },
+          { { Empty{} }, false }
+        }},
 
-          AndExpr{{
-            { { Uid{ 123 } } }
-          }},
-        }}
+        AndExpr{{
+          { { Uid{ 123u } } }
+        }},
       }}
-    }
+    }}
   };
 
   EXPECT_EQ(expr.starts[0], "/opt");
-  EXPECT_EQ(get<Name>(get<Primary>(expr.exprs[0].segs[0].ors[0].ands[0].unit)), "file.txt");
-  EXPECT_EQ(get<Empty>(get<Primary>(expr.exprs[0].segs[0].ors[0].ands[1].unit)), (monostate{}));
-  EXPECT_FALSE(expr.exprs[0].segs[0].ors[0].ands[1].isTrue);
-  EXPECT_EQ(get<Uid>(get<Primary>(expr.exprs[0].segs[0].ors[1].ands[0].unit)), 123);
+  EXPECT_EQ(get<Name>(get<Primary>(expr.expr.segs[0].ors[0].ands[0].unit)), "file.txt");
+  EXPECT_EQ(get<Empty>(get<Primary>(expr.expr.segs[0].ors[0].ands[1].unit)), (monostate{}));
+  EXPECT_FALSE(expr.expr.segs[0].ors[0].ands[1].isTrue);
+  EXPECT_EQ(get<Uid>(get<Primary>(expr.expr.segs[0].ors[1].ands[0].unit)), NumberArg{123});
 
   FindqAstNode{expr}.printAst();
 }

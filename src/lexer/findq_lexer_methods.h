@@ -42,13 +42,13 @@ int Lexer::setState(const State state) {
   int newState;
   switch(state) {
     case State::stringArg:
-      newState = STRING_ARG_WHITESPACE;
+      newState = SC_STRING_ARG_WHITESPACE;
       break;
     case State::numberArg:
-      newState = NUMBER_ARG_WHITESPACE;
+      newState = SC_NUMBER_ARG_WHITESPACE;
       break;
     case State::execArgs:
-      newState = EXEC_ARGS_WHITESPACE;
+      newState = SC_EXEC_ARGS_WHITESPACE;
       break;
     default:
       return -1;

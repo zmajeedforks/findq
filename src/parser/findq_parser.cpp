@@ -60,7 +60,8 @@ int main(int argc, char* argv[])
   int debug{};
   int printStats{};
 
-  auto inputFilename = "stdin"s;
+// need filename pointer to stick around for bison error messages that print filename and position
+  auto inputFilename = make_unique<string>("stdin");
 
   option opts[] = {
     {"debug", no_argument, &debug, 1},
@@ -106,7 +107,7 @@ int main(int argc, char* argv[])
   lexer.switch_streams(&fileStream);
 
   BisonParam bisonParam;
-  LexParam lexParam{.loc = location(&inputFilename)};
+  LexParam lexParam{.loc = location(inputFilename.get())};
 
   duration<double> yylexSec{};
 

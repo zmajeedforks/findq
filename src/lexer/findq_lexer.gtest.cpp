@@ -26,9 +26,6 @@ SOFTWARE.
 
 #include "findq_lexer.h"
 
-#include <unistd.h>
-#include <getopt.h>
-
 #include <sstream>
 #include <string>
 
@@ -48,13 +45,13 @@ using token = FindqParser::token;
 TEST(Lexer, test_0) {
   stringstream s("find -empty");
   Lexer lexer(s);
+  LexParam lexParam{};
 
-  location loc{};
+  auto token = lexer.yylex(lexParam);
 
-  auto token = lexer.yylex(loc);
   EXPECT_EQ(token.kind(), FindqParser::symbol_kind::S_FIND);
+  EXPECT_EQ(lexer.yylex(lexParam).kind(), FindqParser::symbol_kind::S_EMPTY);
 
-  EXPECT_EQ(lexer.yylex(loc).kind(), FindqParser::symbol_kind::S_EMPTY);
 }
 
 }

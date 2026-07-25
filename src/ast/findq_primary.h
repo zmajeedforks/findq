@@ -40,13 +40,15 @@ SOFTWARE.
 #include <functional>
 #include <print>
 
+#include "findq_token_types.h"
+
 namespace findqparser {
 using namespace std;
 
 // data structures for primaries - test, action, global option, positional option
 
 // helper for string nontype template parameter
-// remove if fixed_string becomes part of c++ standard 
+// remove if fixed_string becomes part of c++ standard
 template<size_t N>
 struct FixedString {
   char buf[N];
@@ -55,84 +57,136 @@ struct FixedString {
 };
 
 // the 4 kinds of primaries to use as PrimaryTag type
-struct TestPrimaryTag {};
-struct ActionPrimaryTag {};
-#if 0
-struct GlobalOptPrimary {};
-struct PositionalOptPrimary {};
-#endif
-
-// global option primaries
-
-// positional option primaries
+struct TestTag {};
+struct ActionTag {};
+struct GlobalOptTag {};
+struct PositionalOptTag {};
 
 // Prop has type like string, vector<string>, int
 // has unique name, this could be an empty struct tag to make prop a unique type for variant inclusion
 // is specific type of primary - test, action, global option, positional option, this is to insure a specific prop is only used as the intended primary
 template <typename T, FixedString PropName, typename PrimaryTag>
-struct Prop : T {
+struct Prop: T {
   using T::T;
+  using T::operator=;
+
+// honestly ridiculous to have to explicitly default all these constructors and operators
+// if Prop derives from string it should behave exactly like string by default plus some
+
+  constexpr Prop(const T& base): T(base) {}
+  constexpr Prop(T&& base): T(move(base)) {}
+
+  Prop(const Prop&) = default;
+  Prop(Prop&&) = default;
+
+  Prop& operator=(const Prop&) = default;
+  Prop& operator=(Prop&&) = default;
 
   static constexpr string_view name = PropName;
   using type = T;
+
+// to allow direct comparison of variant and Prop without using get<Name>(v) == Name{"abc"}
+// compare variant == prop
+  template <typename... VariantTypes>
+    friend constexpr bool operator==(const variant<VariantTypes...>& var, const Prop& prop) {
+      if (!holds_alternative<Prop>(var)) {
+        return false;
+      }
+      return get<Prop>(var) == static_cast<const T&>(prop);
+    }
+
+// compare prop == variant
+  template <typename... VariantTypes>
+    friend constexpr bool operator==(const Prop& prop, const variant<VariantTypes...>& var) {
+      return var == prop;
+    }
+
+// allow Prop to be initialized from simple pod structs
+// is_constructible rquired to prevent clang from trying stupid combinations like AndExpr and uint64_t in NumberArg
+  template <typename... Args>
+    requires is_constructible_v<T, Args...>
+    constexpr Prop(Args&&... args): T{forward<Args>(args)...} {}
+
 };
 
 // Prop specialization for int because it's not a class type
 // provide conversion operators to act like int
 // could also add c++26 custom static cast operators if needed for testing
 template <FixedString PropName, typename PrimaryTag>
-struct Prop<int, PropName, PrimaryTag> {
-  int value;
+struct Prop<uint64_t, PropName, PrimaryTag> {
+  uint64_t value;
 
-  operator int&() { return value; }
-  operator int() const { return value; }
+  operator uint64_t&() { return value; }
+  operator uint64_t() const { return value; }
 
   static constexpr string_view name = PropName;
-  using type = int;
+  using type = uint64_t;
 };
 
 // test primaries
 
-using Amin = Prop<int, "amin", TestPrimaryTag>;
-using Anewer = Prop<string, "anewer", TestPrimaryTag>;
-using Atime = Prop<int, "atime", TestPrimaryTag>;
-using Cmin = Prop<int, "cmin", TestPrimaryTag>;
-using Cnewer = Prop<string, "cnewer", TestPrimaryTag>;
-using Ctime = Prop<int, "ctime", TestPrimaryTag>;
-using Empty = Prop<monostate, "empty", TestPrimaryTag>;
-using Executable = Prop<monostate, "executable", TestPrimaryTag>;
-using False = Prop<monostate, "false", TestPrimaryTag>;
-using Iname = Prop<string, "iname", TestPrimaryTag>;
-using Name = Prop<string, "name", TestPrimaryTag>;
-using Path = Prop<string, "path", TestPrimaryTag>;
-using Size = Prop<int, "size", TestPrimaryTag>;
-using Type = Prop<string, "type", TestPrimaryTag>;
-using Uid = Prop<int, "uid", TestPrimaryTag>;
-using User = Prop<string, "user", TestPrimaryTag>;
+using Amin = Prop<NumberArg, "amin", TestTag>;
+using Anewer = Prop<string, "anewer", TestTag>;
+using Atime = Prop<NumberArg, "atime", TestTag>;
+using Cmin = Prop<NumberArg, "cmin", TestTag>;
+using Cnewer = Prop<string, "cnewer", TestTag>;
+using Ctime = Prop<NumberArg, "ctime", TestTag>;
+using Empty = Prop<monostate, "empty", TestTag>;
+using Executable = Prop<monostate, "executable", TestTag>;
+using False = Prop<monostate, "false", TestTag>;
+using Fstype = Prop<string, "fstype", TestTag>;
+using Gid = Prop<NumberArg, "gid", TestTag>;
+using Group = Prop<string, "group", TestTag>;
+using Ilname = Prop<string, "ilname", TestTag>;
+using Iname = Prop<string, "iname", TestTag>;
+using Inum = Prop<NumberArg, "inum", TestTag>;
+using Ipath = Prop<string, "ipath", TestTag>;
+using Iregex = Prop<string, "iregex", TestTag>;
+using Iwholename = Prop<string, "iwholename", TestTag>;
+using Links = Prop<NumberArg, "links", TestTag>;
+using Lname = Prop<string, "lname", TestTag>;
+using Mmin = Prop<NumberArg, "mmin", TestTag>;
+using Mtime = Prop<NumberArg, "mtime", TestTag>;
+using Name = Prop<string, "name", TestTag>;
+using Newer = Prop<string, "newer", TestTag>;
+using NewerXY = Prop<string, "newerXY", TestTag>;
+using NoGroup = Prop<monostate, "nogroup", TestTag>;
+using NoUser = Prop<monostate, "nouser", TestTag>;
+using Path = Prop<string, "path", TestTag>;
+using Perm = Prop<string, "perm", TestTag>;
+using Readable = Prop<monostate, "readable", TestTag>;
+using Regex = Prop<string, "regex", TestTag>;
+using Samefile = Prop<monostate, "samefile", TestTag>;
+using Size = Prop<NumberArg, "size", TestTag>;
+using True = Prop<monostate, "true", TestTag>;
+using Type = Prop<string, "type", TestTag>;
+using Uid = Prop<NumberArg, "uid", TestTag>;
+using Used = Prop<NumberArg, "used", TestTag>;
+using User = Prop<string, "user", TestTag>;
+using Wholename = Prop<string, "wholename", TestTag>;
+using Writable = Prop<monostate, "writable", TestTag>;
+using Xtype = Prop<string, "xtype", TestTag>;
 
-#if 0
-using TestPrimary = variant<Amin, Anewer, Atime, Cmin, Cnewer, Ctime, Empty, Executable, False, Iname, Name, Path, Size, Type, Uid, User>;
-#else
-using TestPrimary = variant<Empty, Name, Size, Uid, User>;
-#endif
+
+using TestPrimary = variant<Amin, Anewer, Atime, Cmin, Cnewer, Ctime, Empty, Executable, False, Fstype, Gid, Group, Ilname, Iname, Inum, Ipath, Iregex, Iwholename, Links, Lname, Mmin, Mtime, Name, Newer, NewerXY, NoGroup, NoUser, Path, Perm, Readable, Regex, Samefile, Size, True, Type, Uid, User, Used, Wholename, Writable, Xtype>;
 
 // action primaries
 
-using Delete = Prop<monostate, "delete", ActionPrimaryTag>;
-using Exec = Prop<vector<string>, "exec", ActionPrimaryTag>;
-using Execdir = Prop<vector<string>, "execdir", ActionPrimaryTag>;
-using Fls = Prop<string, "fls", ActionPrimaryTag>;
-using Fprint = Prop<string, "fprint", ActionPrimaryTag>;
-using Fprint0 = Prop<string, "fprint0", ActionPrimaryTag>;
-using Fprintf = Prop<string, "fprintf", ActionPrimaryTag>;
-using Ls = Prop<monostate, "ls", ActionPrimaryTag>;
-using Ok = Prop<vector<string>, "ok", ActionPrimaryTag>;
-using Okdir = Prop<vector<string>, "okdir", ActionPrimaryTag>;
-using Print = Prop<monostate, "print", ActionPrimaryTag>;
-using Print0 = Prop<monostate, "print0", ActionPrimaryTag>;
-using Printf = Prop<string, "printf", ActionPrimaryTag>;
-using Prune = Prop<monostate, "prune", ActionPrimaryTag>;
-using Quit = Prop<monostate, "quit", ActionPrimaryTag>;
+using Delete = Prop<monostate, "delete", ActionTag>;
+using Exec = Prop<vector<string>, "exec", ActionTag>;
+using Execdir = Prop<vector<string>, "execdir", ActionTag>;
+using Fls = Prop<string, "fls", ActionTag>;
+using Fprint = Prop<string, "fprint", ActionTag>;
+using Fprint0 = Prop<string, "fprint0", ActionTag>;
+using Fprintf = Prop<string, "fprintf", ActionTag>;
+using Ls = Prop<monostate, "ls", ActionTag>;
+using Ok = Prop<vector<string>, "ok", ActionTag>;
+using Okdir = Prop<vector<string>, "okdir", ActionTag>;
+using Print = Prop<monostate, "print", ActionTag>;
+using Print0 = Prop<monostate, "print0", ActionTag>;
+using Printf = Prop<string, "printf", ActionTag>;
+using Prune = Prop<monostate, "prune", ActionTag>;
+using Quit = Prop<monostate, "quit", ActionTag>;
 
 #if 0
 using ActionPrimary = variant<Delete, Exec, Execdir, Fls, Fprint, Fprint0, Fprintf, Ls, Ok, Okdir, Print, Print0, Printf, Prune, Quit>;
@@ -140,12 +194,38 @@ using ActionPrimary = variant<Delete, Exec, Execdir, Fls, Fprint, Fprint0, Fprin
 using ActionPrimary = variant<Exec, Ls, Printf>;
 #endif
 
-// main ast node types
+// global option primaries
+
+using Depth = Prop<monostate, "depth", GlobalOptTag>;
+using Files0From = Prop<string, "files0-from", GlobalOptTag>;
+using Help = Prop<monostate, "help", GlobalOptTag>;
+using IgnoreReaddirRace = Prop<monostate, "ignore_readdir_race", GlobalOptTag>;
+using Maxdepth = Prop<NumberArg, "maxdepth", GlobalOptTag>;
+using Mindepth = Prop<NumberArg, "mindepth", GlobalOptTag>;
+using Mount = Prop<monostate, "mount", GlobalOptTag>;
+using NoIgnoreReaddirRace = Prop<monostate, "noignore_readdir_race", GlobalOptTag>;
+using NoLeaf = Prop<monostate, "noleaf", GlobalOptTag>;
+using Xdev = Prop<monostate, "xdev", GlobalOptTag>;
+
+using GlobalOptPrimary = variant<Depth, Files0From, Help, IgnoreReaddirRace, Maxdepth, Mindepth, Mount, NoIgnoreReaddirRace, NoLeaf, Xdev>;
+
+// positional option primaries
+
+using Daystart = Prop<monostate, "daystart", PositionalOptTag>;
+using Follow = Prop<monostate, "follow", PositionalOptTag>;
+using NoWarn = Prop<monostate, "nowarn", PositionalOptTag>;
+using Regextype = Prop<string, "regextype", PositionalOptTag>;
+using Warn = Prop<monostate, "warn", PositionalOptTag>;
+
+using PositionalOptPrimary = variant<Daystart, Follow, NoWarn, Regextype, Warn>;
+
+
 
 // flatten multiple nested variants into single variant
 
-// may cause vc++ bug with error c2672 no matching overload found if even one subtype in merged variant is missing in overload despite containing fallback default lambda
-// generally only a problem during initial development when it might be fine to skip some subtypes
+// seems to cause vc++ bug with error c2672 no matching overload found if even one subtype in merged variant is missing in overload despite containing fallback default lambda
+// generally a problem only during initial development when it might be fine to skip some subtypes
+// might get rid of MergeVariants and simply have Primary: variant<TestPrimary, ActionPrimary, GlobalOptPrimary, PositionalOptPrimary>
 template<typename... Variants>
 struct MergeVariants;
 
@@ -165,6 +245,10 @@ struct MergeVariants<variant<T1...>, variant<T2...>, Rest...> {
 // flatten variants into single variant using MergeVariants helper
 // note type at the end
 using Primary = typename MergeVariants<TestPrimary, ActionPrimary>::type;
+
+
+
+
 
 }
 
